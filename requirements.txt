@@ -1,0 +1,6 @@
+streamlit
+sentence-transformers
+pinecone-client
+firebase-admin
+easyocr
+pillow
