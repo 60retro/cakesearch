@@ -88,7 +88,7 @@ with tab_search:
 # -----------------------------------
 with tab_admin:
     st.write("อัพโหลดสินค้าใหม่เข้าระบบ")
-    password = st.text_input("รหัสผ่าน Admin", type="3457")
+    password = st.text_input("รหัสผ่าน Admin", type="password")
     
     if password == st.secrets["ADMIN_PASSWORD"]:
         st.success("เข้าสู่ระบบแอดมินสำเร็จ")
@@ -131,4 +131,5 @@ with tab_admin:
                     except Exception as e:
                         st.error(f"เกิดข้อผิดพลาด: {e}")
     elif password:
+
         st.error("รหัสผ่านไม่ถูกต้อง")
