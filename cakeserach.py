@@ -2,18 +2,18 @@ import streamlit as st
 from PIL import Image
 from sentence_transformers import SentenceTransformer
 from pinecone import Pinecone
-import google.generativeai as genai
+from google import genai
 
 st.set_page_config(page_title="ค้นหาแบบเค้กพนักงาน Nami", layout="centered")
 
 # ==========================================
-# 1. เชื่อมต่อระบบ (ดึงค่าจาก Secrets)
+# 1. เชื่อมต่อระบบ
 # ==========================================
 pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
 index = pc.Index("cakesearch")
 
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-vision_model = genai.GenerativeModel('gemini-1.5-flash')
+# ตั้งค่า Client แบบใหม่ของ Gemini
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 # ==========================================
 # 2. โหลด AI Model แปลงข้อความ
@@ -30,7 +30,6 @@ text_model = load_text_model()
 st.title("🎂 ระบบค้นหาแบบเค้ก Nami (AI โครงสร้างภาพ)")
 st.write("ระบบจะประเมินรูปทรงและของตกแต่ง เพื่อหาแบบเค้กในร้านที่โครงสร้างเหมือนกันที่สุด (ไม่จำกัดสี)")
 
-# หมวดหมู่ที่พนักงานเลือกได้
 category_options = ["ค้นหาทั้งหมด (ไม่แยกหมวด)", "เค้ก 1 ชั้น", "เค้ก 2 ชั้น", "เค้ก 3 มิติ", "คัพเค้ก", "งานฟองดอง", "เค้กซ่อนเงิน", "เค้กดึงเงิน"]
 selected_cat = st.selectbox("📌 เลือกหมวดหมู่ที่ต้องการค้นหา (ช่วยให้แม่นขึ้น 100%):", category_options)
 
@@ -43,12 +42,15 @@ if search_file:
     if st.button("🔍 วิเคราะห์และค้นหา", type="primary", use_container_width=True):
         with st.spinner("AI กำลังถอดรหัสโครงสร้างเค้ก..."):
             try:
-                # 1. ให้ Gemini ถอดรหัสโครงสร้างเค้กของลูกค้า
+                # 1. ให้ Gemini ถอดรหัสภาพ (คำสั่งใหม่)
                 prompt = """
                 จงวิเคราะห์โครงสร้างของเค้กในรูปภาพนี้อย่างละเอียด ห้ามระบุสีเด็ดขาด 
                 ให้ระบุเป็นคำสั้นๆ คั่นด้วยลูกน้ำ (,) โดยเน้นที่: จำนวนชั้น, รูปทรง, สไตล์การตกแต่งพื้นผิว, และของตกแต่ง
                 """
-                response = vision_model.generate_content([prompt, img_search])
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=[prompt, img_search]
+                )
                 extracted_features = response.text.strip().replace('\n', ' ')
                 
                 st.success(f"**🧠 AI อ่านโครงสร้างภาพได้ว่า:** {extracted_features}")
@@ -62,7 +64,6 @@ if search_file:
                     "include_metadata": True
                 }
                 
-                # ใช้ Filter หมวดหมู่
                 if selected_cat != "ค้นหาทั้งหมด (ไม่แยกหมวด)":
                     query_params["filter"] = {"category": selected_cat}
 
