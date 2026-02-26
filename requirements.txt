@@ -1,6 +1,6 @@
 streamlit
 sentence-transformers
-pinecone-client
+pinecone
 firebase-admin
 easyocr
 pillow
