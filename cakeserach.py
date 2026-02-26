@@ -67,18 +67,22 @@ with tab_search:
                 response = index.query(vector=embedding, top_k=3, include_metadata=True)
 
                 if response['matches']:
-                    st.subheader("สินค้าที่พบ:")
+                    st.subheader("สินค้าที่คล้ายกัน:")
                     for match in response['matches']:
                         meta = match['metadata']
+                        
+                        # ออกแบบการ์ดแสดงผลใหม่ ให้รูปใหญ่ขึ้นและไม่โชว์ราคาที่ AI อ่าน
                         with st.container():
-                            cols = st.columns([1, 2])
+                            # ปรับขนาดคอลัมน์ให้รูปภาพกว้างขึ้น (สัดส่วน 3:2) จะได้อ่านข้อความบนรูปชัดๆ
+                            cols = st.columns([3, 2]) 
                             with cols[0]:
                                 if meta.get('image_url'):
                                     st.image(meta['image_url'], use_container_width=True)
                             with cols[1]:
-                                st.write(f"**รหัส/ชื่อ:** {match['id']}")
-                                st.write(f"**ราคา:** {meta.get('price', 'ไม่ระบุ')} บาท")
-                                st.caption(f"ความแม่นยำ: {match['score']:.2f}")
+                                st.write(f"**ชื่อรูปภาพ / รหัส:**")
+                                st.code(f"{match['id']}")
+                                st.info("👆 **รายละเอียดและราคา:**\nสามารถดูได้จากป้ายราคาบนรูปภาพด้านซ้ายมือได้เลยครับ")
+                                st.caption(f"ความแม่นยำของภาพ: {match['score']:.2%}")
                             st.divider()
                 else:
                     st.warning("ไม่พบสินค้าที่ใกล้เคียงครับ")
@@ -133,4 +137,5 @@ with tab_admin:
     elif password:
 
         st.error("รหัสผ่านไม่ถูกต้อง")
+
 
