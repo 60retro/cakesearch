@@ -24,7 +24,7 @@ if not firebase_admin._apps:
 
 # เชื่อมต่อ Pinecone
 pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
-index = pc.Index("custom-products")
+index = pc.Index("cakesearch")
 
 # ==========================================
 # 2. โหลด AI Models
@@ -133,3 +133,4 @@ with tab_admin:
     elif password:
 
         st.error("รหัสผ่านไม่ถูกต้อง")
+
