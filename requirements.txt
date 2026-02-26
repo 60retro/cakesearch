@@ -5,4 +5,5 @@ firebase-admin
 easyocr
 pillow
 google-generativeai
+google-genai
 
