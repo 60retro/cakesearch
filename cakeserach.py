@@ -80,7 +80,8 @@ with tab_search:
                                     st.image(meta['image_url'], use_container_width=True)
                             with cols[1]:
                                 st.write(f"**ชื่อรูปภาพ / รหัส:**")
-                                st.code(f"{match['id']}")
+                                # ดึงชื่อไฟล์ภาษาไทยมาแสดง ถ้าไม่มีให้แสดง ID ปกติ
+                                st.code(f"{meta.get('filename', match['id'])}")
                                 st.info("👆 **รายละเอียดและราคา:**\nสามารถดูได้จากป้ายราคาบนรูปภาพด้านซ้ายมือได้เลยครับ")
                                 st.caption(f"ความแม่นยำของภาพ: {match['score']:.2%}")
                             st.divider()
@@ -137,5 +138,6 @@ with tab_admin:
     elif password:
 
         st.error("รหัสผ่านไม่ถูกต้อง")
+
 
 
