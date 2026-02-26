@@ -4,3 +4,5 @@ pinecone
 firebase-admin
 easyocr
 pillow
+google-generativeai
+
