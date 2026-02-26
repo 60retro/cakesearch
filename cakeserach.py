@@ -1,143 +1,91 @@
 import streamlit as st
-import firebase_admin
-from firebase_admin import credentials, storage
-from pinecone import Pinecone
-from sentence_transformers import SentenceTransformer
-import easyocr
 from PIL import Image
-import io
-import re
+from sentence_transformers import SentenceTransformer
+from pinecone import Pinecone
+import google.generativeai as genai
 
-st.set_page_config(page_title="Nami Custom Products", layout="centered")
+st.set_page_config(page_title="ค้นหาแบบเค้กพนักงาน Nami", layout="centered")
 
 # ==========================================
-# 1. การเชื่อมต่อฐานข้อมูล (จาก Secrets)
+# 1. เชื่อมต่อระบบ (ดึงค่าจาก Secrets)
 # ==========================================
-# เชื่อมต่อ Firebase
-if not firebase_admin._apps:
-    # ดึงข้อมูลจาก Streamlit Secrets
-    firebase_creds = dict(st.secrets["firebase"])
-    cred = credentials.Certificate(firebase_creds)
-    firebase_admin.initialize_app(cred, {
-        'storageBucket': st.secrets["FIREBASE_BUCKET"]
-    })
-
-# เชื่อมต่อ Pinecone
 pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
 index = pc.Index("cakesearch")
 
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+vision_model = genai.GenerativeModel('gemini-1.5-flash')
+
 # ==========================================
-# 2. โหลด AI Models
+# 2. โหลด AI Model แปลงข้อความ
 # ==========================================
 @st.cache_resource
-def load_models():
-    clip = SentenceTransformer('clip-ViT-B-32')
-    ocr = easyocr.Reader(['th', 'en'], gpu=False)
-    return clip, ocr
+def load_text_model():
+    return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
-clip_model, ocr_reader = load_models()
-
-def extract_price(text_list):
-    full_text = " ".join(text_list)
-    numbers = re.findall(r'\d+', full_text)
-    return numbers[-1] if numbers else "ไม่ระบุราคา"
+text_model = load_text_model()
 
 # ==========================================
-# 3. หน้าจอการทำงาน (UI)
+# 3. หน้าจอการค้นหา
 # ==========================================
-st.title("🛍️ Nami Visual Search")
+st.title("🎂 ระบบค้นหาแบบเค้ก Nami (AI โครงสร้างภาพ)")
+st.write("ระบบจะประเมินรูปทรงและของตกแต่ง เพื่อหาแบบเค้กในร้านที่โครงสร้างเหมือนกันที่สุด (ไม่จำกัดสี)")
 
-# สร้าง 2 แท็บ: สำหรับค้นหา และ สำหรับแอดมิน
-tab_search, tab_admin = st.tabs(["🔍 ค้นหาสินค้า", "⚙️ จัดการสินค้า (Admin)"])
+# หมวดหมู่ที่พนักงานเลือกได้
+category_options = ["ค้นหาทั้งหมด (ไม่แยกหมวด)", "เค้ก 1 ชั้น", "เค้ก 2 ชั้น", "เค้ก 3 มิติ", "คัพเค้ก", "งานฟองดอง", "เค้กซ่อนเงิน", "เค้กดึงเงิน"]
+selected_cat = st.selectbox("📌 เลือกหมวดหมู่ที่ต้องการค้นหา (ช่วยให้แม่นขึ้น 100%):", category_options)
 
-# -----------------------------------
-# หน้าค้นหาสินค้า (ใช้งานได้ทุกคน)
-# -----------------------------------
-with tab_search:
-    st.write("อัพโหลดรูปภาพเพื่อหาสินค้าที่ใกล้เคียงที่สุด")
-    search_file = st.file_uploader("เลือกรูปภาพเพื่อค้นหา", type=["jpg", "jpeg", "png"], key="search")
+search_file = st.file_uploader("อัพโหลดรูปภาพ Reference จากลูกค้า", type=["jpg", "jpeg", "png"])
 
-    if search_file:
-        img_search = Image.open(search_file).convert("RGB")
-        st.image(img_search, caption="รูปที่ต้องการหา", width=250)
+if search_file:
+    img_search = Image.open(search_file).convert("RGB")
+    st.image(img_search, caption="รูปลูกค้า", width=250)
 
-        if st.button("ค้นหาเลย", type="primary", use_container_width=True):
-            with st.spinner("กำลังค้นหาข้อมูล..."):
-                embedding = clip_model.encode(img_search).tolist()
-                response = index.query(vector=embedding, top_k=3, include_metadata=True)
+    if st.button("🔍 วิเคราะห์และค้นหา", type="primary", use_container_width=True):
+        with st.spinner("AI กำลังถอดรหัสโครงสร้างเค้ก..."):
+            try:
+                # 1. ให้ Gemini ถอดรหัสโครงสร้างเค้กของลูกค้า
+                prompt = """
+                จงวิเคราะห์โครงสร้างของเค้กในรูปภาพนี้อย่างละเอียด ห้ามระบุสีเด็ดขาด 
+                ให้ระบุเป็นคำสั้นๆ คั่นด้วยลูกน้ำ (,) โดยเน้นที่: จำนวนชั้น, รูปทรง, สไตล์การตกแต่งพื้นผิว, และของตกแต่ง
+                """
+                response = vision_model.generate_content([prompt, img_search])
+                extracted_features = response.text.strip().replace('\n', ' ')
+                
+                st.success(f"**🧠 AI อ่านโครงสร้างภาพได้ว่า:** {extracted_features}")
+                
+                # 2. แปลงข้อความเป็น Vector แล้วค้นหา
+                embedding = text_model.encode(extracted_features).tolist()
+                
+                query_params = {
+                    "vector": embedding,
+                    "top_k": 3,
+                    "include_metadata": True
+                }
+                
+                # ใช้ Filter หมวดหมู่
+                if selected_cat != "ค้นหาทั้งหมด (ไม่แยกหมวด)":
+                    query_params["filter"] = {"category": selected_cat}
 
-                if response['matches']:
-                    st.subheader("สินค้าที่คล้ายกัน:")
-                    for match in response['matches']:
+                response_pinecone = index.query(**query_params)
+
+                # 3. แสดงผลลัพธ์
+                if response_pinecone['matches']:
+                    st.subheader(f"ผลการค้นหา:")
+                    for match in response_pinecone['matches']:
                         meta = match['metadata']
                         
-                        # ออกแบบการ์ดแสดงผลใหม่ ให้รูปใหญ่ขึ้นและไม่โชว์ราคาที่ AI อ่าน
                         with st.container():
-                            # ปรับขนาดคอลัมน์ให้รูปภาพกว้างขึ้น (สัดส่วน 3:2) จะได้อ่านข้อความบนรูปชัดๆ
                             cols = st.columns([3, 2]) 
                             with cols[0]:
                                 if meta.get('image_url'):
                                     st.image(meta['image_url'], use_container_width=True)
                             with cols[1]:
-                                st.write(f"**ชื่อรูปภาพ / รหัส:**")
-                                # ดึงชื่อไฟล์ภาษาไทยมาแสดง ถ้าไม่มีให้แสดง ID ปกติ
-                                st.code(f"{meta.get('filename', match['id'])}")
-                                st.info("👆 **รายละเอียดและราคา:**\nสามารถดูได้จากป้ายราคาบนรูปภาพด้านซ้ายมือได้เลยครับ")
-                                st.caption(f"ความแม่นยำของภาพ: {match['score']:.2%}")
+                                st.write(f"**ชื่อไฟล์:** {meta.get('filename', match['id'])}")
+                                st.write(f"**หมวดหมู่:** {meta.get('category', 'ไม่ได้ระบุ')}")
+                                st.caption(f"**คุณสมบัติภาพนี้:** {meta.get('description', '')}")
+                                st.caption(f"ความตรงกันของโครงสร้าง: {match['score']:.2%}")
                             st.divider()
                 else:
-                    st.warning("ไม่พบสินค้าที่ใกล้เคียงครับ")
-
-# -----------------------------------
-# หน้าแอดมิน (ต้องใส่รหัสผ่าน)
-# -----------------------------------
-with tab_admin:
-    st.write("อัพโหลดสินค้าใหม่เข้าระบบ")
-    password = st.text_input("รหัสผ่าน Admin", type="password")
-    
-    if password == st.secrets["ADMIN_PASSWORD"]:
-        st.success("เข้าสู่ระบบแอดมินสำเร็จ")
-        
-        # ให้ตั้งชื่อไฟล์ (ID) เพื่อไม่ให้ซ้ำกัน
-        product_id = st.text_input("รหัสสินค้า / ชื่อรูปภาพ (ภาษาอังกฤษหรือตัวเลข)")
-        upload_file = st.file_uploader("เลือกรูปภาพสินค้าเพื่ออัพโหลด", type=["jpg", "jpeg", "png"], key="upload")
-        
-        if upload_file and product_id:
-            img_upload = Image.open(upload_file).convert("RGB")
-            st.image(img_upload, width=250)
-            
-            if st.button("อัพโหลดขึ้นระบบ"):
-                with st.spinner("กำลังประมวลผล (อ่านราคา -> อัพขึ้นคลาวด์ -> บันทึกข้อมูล)..."):
-                    try:
-                        # 1. ให้ AI อ่านราคา
-                        img_byte_arr = io.BytesIO()
-                        img_upload.save(img_byte_arr, format='JPEG')
-                        ocr_result = ocr_reader.readtext(img_byte_arr.getvalue(), detail=0)
-                        price = extract_price(ocr_result)
-                        st.info(f"AI อ่านราคาได้: {price}")
-
-                        # 2. อัพโหลดรูปขึ้น Firebase
-                        bucket = storage.bucket()
-                        blob = bucket.blob(f"products/{product_id}.jpg")
-                        blob.upload_from_string(img_byte_arr.getvalue(), content_type='image/jpeg')
-                        blob.make_public()
-                        image_url = blob.public_url
-
-                        # 3. แปลงภาพเป็น Vector และบันทึกลง Pinecone
-                        embedding = clip_model.encode(img_upload).tolist()
-                        index.upsert(
-                            vectors=[{
-                                "id": product_id,
-                                "values": embedding,
-                                "metadata": {"price": price, "image_url": image_url}
-                            }]
-                        )
-                        st.success(f"✅ บันทึกสินค้า {product_id} สำเร็จเรียบร้อยแล้ว!")
-                    except Exception as e:
-                        st.error(f"เกิดข้อผิดพลาด: {e}")
-    elif password:
-
-        st.error("รหัสผ่านไม่ถูกต้อง")
-
-
-
+                    st.warning("ไม่พบแบบเค้กที่โครงสร้างตรงกันในหมวดนี้ครับ")
+            except Exception as e:
+                st.error(f"เกิดข้อผิดพลาดในการประมวลผล: {e}")
