@@ -13,7 +13,7 @@ pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
 index = pc.Index("cakesearch")
 
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-vision_model = genai.GenerativeModel('gemini-1.5-flash')
+vision_model = genai.GenerativeModel('gemini-flash-lite-latest')
 
 # ==========================================
 # 2. โหลด AI Model แปลงข้อความ
@@ -87,3 +87,4 @@ if search_file:
                     st.warning("ไม่พบแบบเค้กที่โครงสร้างตรงกันในหมวดนี้ครับ")
             except Exception as e:
                 st.error(f"เกิดข้อผิดพลาดในการประมวลผล: {e}")
+
